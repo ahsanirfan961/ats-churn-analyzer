@@ -1,0 +1,61 @@
+import pytest
+
+from app.data.store import df
+from app.model.loader import feature_cols
+from app.model.predict import compare_scenarios, predict_churn_risk, predict_hypothetical
+
+KNOWN_ID = "4424-TKOPW"
+
+
+@pytest.fixture
+def known_features():
+    return df.loc[df["customerID"] == KNOWN_ID, feature_cols].iloc[0].to_dict()
+
+
+def test_predict_churn_risk_known_customer():
+    result = predict_churn_risk(KNOWN_ID)
+    assert result["customer_id"] == KNOWN_ID
+    assert 0.0 <= result["risk_score"] <= 1.0
+    assert len(result["top_factors"]) == 3
+    assert result["top_factors"][0]["direction"] in {"increases_risk", "decreases_risk"}
+
+
+def test_predict_churn_risk_unknown_customer():
+    result = predict_churn_risk("NOT-A-REAL-ID")
+    assert "error" in result
+    assert "not found" in result["error"]
+
+
+def test_predict_hypothetical_fully_specified(known_features):
+    result = predict_hypothetical(known_features)
+    assert result["defaulted_fields"] == []
+    assert result["risk_score"] == predict_churn_risk(KNOWN_ID)["risk_score"]
+
+
+def test_predict_hypothetical_partial_input():
+    result = predict_hypothetical({"Contract": "Two year", "tenure": 60})
+    assert set(result["defaulted_fields"]) == set(feature_cols) - {"Contract", "tenure"}
+    assert 0.0 <= result["risk_score"] <= 1.0
+
+
+def test_predict_hypothetical_rejects_unknown_field():
+    result = predict_hypothetical({"region": "north"})
+    assert "error" in result
+
+
+def test_compare_scenarios_delta_matches_manual_subtraction():
+    result = compare_scenarios({"Contract": "Two year"}, customer_id=KNOWN_ID)
+    manual = result["modified"]["risk_score"] - result["baseline"]["risk_score"]
+    assert result["delta"] == pytest.approx(manual, abs=1e-9)
+    assert result["changed_fields"] == ["Contract"]
+
+
+def test_compare_scenarios_accepts_base_features(known_features):
+    result = compare_scenarios({"tenure": 72}, base_features=known_features)
+    assert result["baseline"]["risk_score"] == predict_churn_risk(KNOWN_ID)["risk_score"]
+    assert result["modified"]["risk_score"] != result["baseline"]["risk_score"]
+
+
+def test_compare_scenarios_requires_exactly_one_baseline(known_features):
+    assert "error" in compare_scenarios({"tenure": 1})
+    assert "error" in compare_scenarios({"tenure": 1}, customer_id=KNOWN_ID, base_features=known_features)
