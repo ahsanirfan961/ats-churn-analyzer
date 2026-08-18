@@ -42,6 +42,7 @@ export function useChatStream(threadId: string | null) {
       setIsStreaming(true)
 
       let answer: PendingAnswer = { ...emptyPending }
+      let completed = false
       setPending(answer)
 
       for await (const event of streamTurn(threadId, text)) {
@@ -71,21 +72,34 @@ export function useChatStream(threadId: string | null) {
             {
               role: 'assistant',
               content: event.answer,
-              tool_calls: answer.toolCalls,
+              tool_calls:
+                answer.toolCalls.length > 0 ? [...answer.toolCalls] : undefined,
               verification: answer.verification,
             },
           ])
-          answer = { ...emptyPending }
+          completed = true
+          setPending(null)
+          continue
         } else if (event.type === 'error') {
           setMessages((current) => [
             ...current,
-            { role: 'assistant', content: event.message, tool_calls: answer.toolCalls },
+            {
+              role: 'assistant',
+              content: event.message,
+              tool_calls:
+                answer.toolCalls.length > 0 ? [...answer.toolCalls] : undefined,
+            },
           ])
-          answer = { ...emptyPending }
+          setPending(null)
+          continue
         }
         setPending({ ...answer })
       }
 
+      if (completed) {
+        const loaded = await getMessages(threadId)
+        setMessages(loaded)
+      }
       setPending(null)
       setIsStreaming(false)
     },
