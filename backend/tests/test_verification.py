@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from app.verification.judge import build_judge_prompt, check_faithfulness
+from app.verification.judge import apply_rounding_tolerance, build_judge_prompt, check_faithfulness
 from app.verification.models import FaithfulnessResult
 
 TOOL_CALLS = [
@@ -19,10 +19,22 @@ TOOL_CALLS = [
 ]
 
 
+def judge_ndjson(*claims):
+    return "\n".join(json.dumps(c) for c in claims)
+
+
+def judge_payload(*claims):
+    return judge_ndjson(*claims)
+
+
 class FakeJudge:
     def __init__(self, content):
         self.content = content
         self.prompts = []
+
+    async def astream(self, prompt):
+        self.prompts.append(prompt)
+        yield type("Chunk", (), {"content": self.content})()
 
     async def ainvoke(self, prompt):
         self.prompts.append(prompt)
@@ -30,12 +42,12 @@ class FakeJudge:
 
 
 class FailingJudge:
+    async def astream(self, prompt):
+        raise RuntimeError("upstream 429")
+        yield
+
     async def ainvoke(self, prompt):
         raise RuntimeError("upstream 429")
-
-
-def judge_payload(*claims):
-    return json.dumps({"claims": list(claims)})
 
 
 def test_prompt_contains_draft_and_every_tool_result():
@@ -78,9 +90,18 @@ async def test_mislabeled_number_is_flagged():
 
 @pytest.mark.asyncio
 async def test_fenced_json_is_still_parsed():
-    judge = FakeJudge("```json\n" + judge_payload(
+    judge = FakeJudge("```json\n" + judge_ndjson(
         {"text": "risk score 0.8502", "verdict": "grounded", "source_tool_call_index": 1}) + "\n```")
     result = await check_faithfulness("Risk score 0.8502.", TOOL_CALLS, judge)
+    assert result.is_faithful and len(result.claims) == 1
+
+
+@pytest.mark.asyncio
+async def test_legacy_wrapped_json_is_still_parsed():
+    judge = FakeJudge(json.dumps({"claims": [
+        {"text": "DSL customers churn at 42%", "verdict": "grounded", "source_tool_call_index": 0},
+    ]}))
+    result = await check_faithfulness("DSL customers churn at 42%.", TOOL_CALLS, judge)
     assert result.is_faithful and len(result.claims) == 1
 
 
@@ -96,6 +117,51 @@ async def test_malformed_judge_output_does_not_crash():
 async def test_judge_api_failure_does_not_crash():
     result = await check_faithfulness("anything", TOOL_CALLS, FailingJudge())
     assert result.parse_error is not None and "judge call failed" in result.parse_error
+
+
+def test_rounding_difference_is_treated_as_grounded():
+    from app.verification.models import ClaimVerdict
+
+    claim = apply_rounding_tolerance(
+        ClaimVerdict(
+            text="58.4%",
+            verdict="fabricated",
+            source_tool_call_index=0,
+            reason="Tool has 0.5835 (58.35%), not 58.4%",
+        ),
+        [{"tool_name": "segment_stats", "args": {}, "output": {"churn_rate": 0.5835}}],
+    )
+    assert claim.verdict == "grounded"
+
+
+def test_materially_wrong_number_stays_fabricated():
+    from app.verification.models import ClaimVerdict
+
+    claim = apply_rounding_tolerance(
+        ClaimVerdict(
+            text="DSL customers churn at 61%",
+            verdict="fabricated",
+            source_tool_call_index=None,
+            reason="no tool result contains 61%",
+        ),
+        TOOL_CALLS,
+    )
+    assert claim.verdict == "fabricated"
+
+
+def test_mislabeled_claim_is_not_relaxed_by_rounding():
+    from app.verification.models import ClaimVerdict
+
+    claim = apply_rounding_tolerance(
+        ClaimVerdict(
+            text="risk score of 42%",
+            verdict="mislabeled",
+            source_tool_call_index=0,
+            reason="42% is the DSL churn rate, not this customer's risk score",
+        ),
+        TOOL_CALLS,
+    )
+    assert claim.verdict == "mislabeled"
 
 
 @pytest.mark.slow

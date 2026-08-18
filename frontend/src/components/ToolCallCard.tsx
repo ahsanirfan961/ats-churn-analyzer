@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { ToolCall, Verification } from '../api/chatClient'
+import type { ClaimCheck, ToolCall, Verification } from '../api/chatClient'
 
 function summarize(args: unknown): string {
   const text = JSON.stringify(args ?? {})
@@ -42,6 +42,52 @@ export function ToolCallCard({ call }: { call: ToolCall }) {
               {pretty(call.output)}
             </pre>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const CLAIM_STYLES: Record<ClaimCheck['verdict'], { icon: string; className: string }> = {
+  grounded: { icon: '✓', className: 'text-emerald-400' },
+  mislabeled: { icon: '⚠', className: 'text-amber-300' },
+  fabricated: { icon: '✗', className: 'text-red-400' },
+}
+
+function ClaimCheckRow({ claim }: { claim: ClaimCheck }) {
+  if (!claim?.verdict) return null
+  const style = CLAIM_STYLES[claim.verdict] ?? CLAIM_STYLES.grounded
+  return (
+    <div className={`flex items-start gap-2 text-xs ${style.className}`}>
+      <span className="mt-px shrink-0 font-mono">{style.icon}</span>
+      <span>
+        "{claim.text}"
+        {claim.reason ? <span className="text-muted"> — {claim.reason}</span> : null}
+      </span>
+    </div>
+  )
+}
+
+export function ClaimCheckList({
+  claims,
+  waiting,
+}: {
+  claims: ClaimCheck[]
+  waiting: boolean
+}) {
+  return (
+    <div className="mt-2 space-y-1.5 rounded-md border border-edge bg-panel/40 px-3 py-2">
+      <div className="text-[11px] uppercase tracking-wide text-muted">Verifying claims</div>
+      {claims.filter(Boolean).map((claim, index) => (
+        <ClaimCheckRow key={index} claim={claim} />
+      ))}
+      {waiting && (
+        <div className="flex items-center gap-2 text-xs text-muted">
+          <span
+            className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-edge border-t-accent"
+            aria-hidden
+          />
+          {claims.length === 0 ? 'Checking answer against tool results…' : 'Checking next claim…'}
         </div>
       )}
     </div>

@@ -89,11 +89,18 @@ export function normalizeMessages(messages: Message[]): Message[] {
   return result
 }
 
+export type ClaimCheck = {
+  text: string
+  verdict: 'grounded' | 'mislabeled' | 'fabricated'
+  reason: string | null
+}
+
 export type StreamEvent =
   | { type: 'token'; text: string }
   | { type: 'tool_call'; name: string; args: unknown }
   | { type: 'tool_result'; name: string; output: string }
   | { type: 'status'; phase: 'verifying' }
+  | { type: 'claim_check'; claim: ClaimCheck }
   | ({ type: 'verification' } & Verification)
   | { type: 'retry'; reason: string }
   | { type: 'done'; answer: string }

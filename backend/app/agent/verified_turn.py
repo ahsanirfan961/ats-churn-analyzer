@@ -5,7 +5,8 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from app.agent.prompts import CORRECTION_TEMPLATE
 from app.agent.summarization import split_at_window
 from app.llm import chat_model
-from app.verification.judge import check_faithfulness
+from app.verification.judge import stream_faithfulness
+from app.verification.models import FaithfulnessResult
 
 CAVEAT = ("Heads up: my own faithfulness check could not tie every figure below back to a tool "
           "result, and I ran out of retries. Treat the flagged numbers with caution.\n\n")
@@ -60,7 +61,21 @@ async def run_verified_turn(graph, thread_id: str, user_message: str, max_retrie
         messages = state.values["messages"]
         draft = messages[-1].content
         yield {"type": "status", "phase": "verifying"}
-        result = await check_faithfulness(draft, tool_calls_in_window(messages), judge_model)
+        claims = []
+        try:
+            async for claim in stream_faithfulness(draft, tool_calls_in_window(messages), judge_model):
+                claims.append(claim)
+                yield {
+                    "type": "claim_check",
+                    "claim": {
+                        "text": claim.text,
+                        "verdict": claim.verdict,
+                        "reason": claim.reason,
+                    },
+                }
+            result = FaithfulnessResult(claims=claims)
+        except (RuntimeError, ValueError) as exc:
+            result = FaithfulnessResult(parse_error=str(exc))
 
         if result.is_faithful:
             yield {"type": "verification", "passed": True, "problems": [],

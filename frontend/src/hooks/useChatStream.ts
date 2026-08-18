@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   getMessages,
   streamTurn,
+  type ClaimCheck,
   type Message,
   type ToolCall,
   type Verification,
@@ -13,6 +14,7 @@ export type PendingAnswer = {
   verification: Verification | null
   rewritten: boolean
   phase: 'streaming' | 'verifying' | null
+  claimChecks: ClaimCheck[]
 }
 
 const emptyPending: PendingAnswer = {
@@ -21,6 +23,7 @@ const emptyPending: PendingAnswer = {
   verification: null,
   rewritten: false,
   phase: 'streaming',
+  claimChecks: [],
 }
 
 export function useChatStream(threadId: string | null) {
@@ -51,7 +54,16 @@ export function useChatStream(threadId: string | null) {
         if (event.type === 'token') {
           answer = { ...answer, content: answer.content + event.text, phase: 'streaming' }
         } else if (event.type === 'status') {
-          answer = { ...answer, phase: event.phase }
+          answer = {
+            ...answer,
+            phase: event.phase,
+            claimChecks: event.phase === 'verifying' ? [] : answer.claimChecks,
+          }
+        } else if (event.type === 'claim_check' && event.claim) {
+          answer = {
+            ...answer,
+            claimChecks: [...answer.claimChecks, event.claim],
+          }
         } else if (event.type === 'tool_call') {
           answer = {
             ...answer,
@@ -69,7 +81,13 @@ export function useChatStream(threadId: string | null) {
         } else if (event.type === 'verification') {
           answer = { ...answer, verification: event, phase: null }
         } else if (event.type === 'retry') {
-          answer = { ...answer, content: '', rewritten: true, phase: 'streaming' }
+          answer = {
+            ...answer,
+            content: '',
+            rewritten: true,
+            phase: 'streaming',
+            claimChecks: [],
+          }
         } else if (event.type === 'done') {
           setMessages((current) => [
             ...current,

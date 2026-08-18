@@ -46,8 +46,17 @@ class ScriptedJudge:
     def __init__(self, *payloads):
         self.payloads = list(payloads)
 
-    async def ainvoke(self, prompt):
-        return type("Response", (), {"content": json.dumps(self.payloads.pop(0))})()
+    def _render(self, payload) -> str:
+        if isinstance(payload, dict) and "claims" in payload:
+            return "\n".join(json.dumps(c) for c in payload["claims"])
+        if isinstance(payload, dict):
+            return json.dumps(payload)
+        return str(payload)
+
+    async def astream(self, prompt):
+        content = self._render(self.payloads.pop(0))
+        for line in content.splitlines(keepends=True):
+            yield type("Chunk", (), {"content": line})()
 
 
 GROUNDED = {"claims": [{"text": "DSL churns at 19%", "verdict": "grounded",
@@ -76,6 +85,7 @@ async def test_faithful_draft_passes_through_untouched():
 
     assert [e["type"] for e in events if e["type"] in {"tool_call", "tool_result"}] == [
         "tool_call", "tool_result"]
+    assert any(e["type"] == "claim_check" for e in events)
     verification = next(e for e in events if e["type"] == "verification")
     assert verification["passed"] is True
     assert events[-1] == {"type": "done", "answer": "DSL churns at 19%."}

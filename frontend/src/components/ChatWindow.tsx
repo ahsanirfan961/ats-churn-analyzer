@@ -3,7 +3,7 @@ import type { Message } from '../api/chatClient'
 import type { PendingAnswer } from '../hooks/useChatStream'
 import MarkdownContent from './MarkdownContent'
 import MessageBubble from './MessageBubble'
-import { ToolCallCard, VerificationBadge } from './ToolCallCard'
+import { ToolCallCard, VerificationBadge, ClaimCheckList } from './ToolCallCard'
 
 const EXAMPLES = [
   'Which contract type has the highest churn rate?',
@@ -67,13 +67,7 @@ export default function ChatWindow({
             <div>
               {pending.content && <MarkdownContent content={pending.content} />}
               {pending.phase === 'verifying' ? (
-                <div className="mt-2 flex items-center gap-2 text-xs text-muted">
-                  <span
-                    className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-edge border-t-accent"
-                    aria-hidden
-                  />
-                  Verifying answer against tool results…
-                </div>
+                <ClaimCheckList claims={pending.claimChecks} waiting={isStreaming} />
               ) : (
                 isStreaming && <span className="animate-pulse text-muted">▍</span>
               )}
