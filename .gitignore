@@ -2,3 +2,15 @@ _bmad
 _bmad-output
 .agents
 .claude
+
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+frontend/dist/
+.env
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+backend/data/
