@@ -1,0 +1,96 @@
+import { useCallback, useEffect, useState } from 'react'
+import {
+  getMessages,
+  streamTurn,
+  type Message,
+  type ToolCall,
+  type Verification,
+} from '../api/chatClient'
+
+export type PendingAnswer = {
+  content: string
+  toolCalls: ToolCall[]
+  verification: Verification | null
+  rewritten: boolean
+}
+
+const emptyPending: PendingAnswer = {
+  content: '',
+  toolCalls: [],
+  verification: null,
+  rewritten: false,
+}
+
+export function useChatStream(threadId: string | null) {
+  const [messages, setMessages] = useState<Message[]>([])
+  const [pending, setPending] = useState<PendingAnswer | null>(null)
+  const [isStreaming, setIsStreaming] = useState(false)
+
+  useEffect(() => {
+    setPending(null)
+    if (!threadId) {
+      setMessages([])
+      return
+    }
+    getMessages(threadId).then(setMessages)
+  }, [threadId])
+
+  const send = useCallback(
+    async (text: string) => {
+      if (!threadId || isStreaming) return
+      setMessages((current) => [...current, { role: 'user', content: text }])
+      setIsStreaming(true)
+
+      let answer: PendingAnswer = { ...emptyPending }
+      setPending(answer)
+
+      for await (const event of streamTurn(threadId, text)) {
+        if (event.type === 'token') {
+          answer = { ...answer, content: answer.content + event.text }
+        } else if (event.type === 'tool_call') {
+          answer = {
+            ...answer,
+            toolCalls: [...answer.toolCalls, { name: event.name, args: event.args }],
+          }
+        } else if (event.type === 'tool_result') {
+          const toolCalls = [...answer.toolCalls]
+          for (let i = toolCalls.length - 1; i >= 0; i -= 1) {
+            if (toolCalls[i].name === event.name && toolCalls[i].output === undefined) {
+              toolCalls[i] = { ...toolCalls[i], output: event.output }
+              break
+            }
+          }
+          answer = { ...answer, toolCalls }
+        } else if (event.type === 'verification') {
+          answer = { ...answer, verification: event }
+        } else if (event.type === 'retry') {
+          answer = { ...answer, content: '', rewritten: true }
+        } else if (event.type === 'done') {
+          setMessages((current) => [
+            ...current,
+            {
+              role: 'assistant',
+              content: event.answer,
+              tool_calls: answer.toolCalls,
+              verification: answer.verification,
+            },
+          ])
+          answer = { ...emptyPending }
+        } else if (event.type === 'error') {
+          setMessages((current) => [
+            ...current,
+            { role: 'assistant', content: event.message, tool_calls: answer.toolCalls },
+          ])
+          answer = { ...emptyPending }
+        }
+        setPending({ ...answer })
+      }
+
+      setPending(null)
+      setIsStreaming(false)
+    },
+    [threadId, isStreaming],
+  )
+
+  return { messages, pending, isStreaming, send }
+}
