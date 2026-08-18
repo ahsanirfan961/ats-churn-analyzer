@@ -59,6 +59,7 @@ async def run_verified_turn(graph, thread_id: str, user_message: str, max_retrie
         state = await graph.aget_state(config)
         messages = state.values["messages"]
         draft = messages[-1].content
+        yield {"type": "status", "phase": "verifying"}
         result = await check_faithfulness(draft, tool_calls_in_window(messages), judge_model)
 
         if result.is_faithful:

@@ -66,7 +66,17 @@ export default function ChatWindow({
             />
             <div>
               {pending.content && <MarkdownContent content={pending.content} />}
-              {isStreaming && <span className="animate-pulse text-muted">▍</span>}
+              {pending.phase === 'verifying' ? (
+                <div className="mt-2 flex items-center gap-2 text-xs text-muted">
+                  <span
+                    className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-edge border-t-accent"
+                    aria-hidden
+                  />
+                  Verifying answer against tool results…
+                </div>
+              ) : (
+                isStreaming && <span className="animate-pulse text-muted">▍</span>
+              )}
             </div>
           </div>
         )}

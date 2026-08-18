@@ -12,6 +12,7 @@ export type PendingAnswer = {
   toolCalls: ToolCall[]
   verification: Verification | null
   rewritten: boolean
+  phase: 'streaming' | 'verifying' | null
 }
 
 const emptyPending: PendingAnswer = {
@@ -19,6 +20,7 @@ const emptyPending: PendingAnswer = {
   toolCalls: [],
   verification: null,
   rewritten: false,
+  phase: 'streaming',
 }
 
 export function useChatStream(threadId: string | null) {
@@ -47,7 +49,9 @@ export function useChatStream(threadId: string | null) {
 
       for await (const event of streamTurn(threadId, text)) {
         if (event.type === 'token') {
-          answer = { ...answer, content: answer.content + event.text }
+          answer = { ...answer, content: answer.content + event.text, phase: 'streaming' }
+        } else if (event.type === 'status') {
+          answer = { ...answer, phase: event.phase }
         } else if (event.type === 'tool_call') {
           answer = {
             ...answer,
@@ -63,9 +67,9 @@ export function useChatStream(threadId: string | null) {
           }
           answer = { ...answer, toolCalls }
         } else if (event.type === 'verification') {
-          answer = { ...answer, verification: event }
+          answer = { ...answer, verification: event, phase: null }
         } else if (event.type === 'retry') {
-          answer = { ...answer, content: '', rewritten: true }
+          answer = { ...answer, content: '', rewritten: true, phase: 'streaming' }
         } else if (event.type === 'done') {
           setMessages((current) => [
             ...current,

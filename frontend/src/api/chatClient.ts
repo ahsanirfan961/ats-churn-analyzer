@@ -93,6 +93,7 @@ export type StreamEvent =
   | { type: 'token'; text: string }
   | { type: 'tool_call'; name: string; args: unknown }
   | { type: 'tool_result'; name: string; output: string }
+  | { type: 'status'; phase: 'verifying' }
   | ({ type: 'verification' } & Verification)
   | { type: 'retry'; reason: string }
   | { type: 'done'; answer: string }
