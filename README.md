@@ -3,14 +3,6 @@
 A churn model plus an agent that answers questions about the customer base by calling real tools
 against the real data, and checks its own answer before it ships it.
 
-- **Stage 1** — [`notebooks/Customer_Churn_Model.ipynb`](notebooks/Customer_Churn_Model.ipynb):
-  EDA, documented cleaning, model comparison, calibration check, held-out evaluation, and the
-  inference functions the agent's tools were built from.
-- **Stage 2** — a React chat app (`frontend/`) with live token streaming, expandable tool-call
-  cards, thread history and a visible self-check result.
-- **Stage 3** — a LangGraph ReAct agent (`backend/app/agent/`) over 8 typed tools, with a
-  faithfulness judge and a bounded retry between the draft answer and the user.
-
 ---
 
 ## Running it
@@ -50,31 +42,18 @@ slug. The same model is used for the agent, the summarizer and the judge.
 
 ### Data issues found and how they were handled
 
-1. **`TotalCharges` is stored as a string**, and 11 rows hold a blank space instead of a number.
-   All 11 are `tenure == 0` brand-new signups who have never been billed. Dropping them would
-   discard real customers and mean-imputing would imply a billing history they don't have, so
-   they are coerced to numeric and imputed as `0.0`.
-2. **Six add-on columns carry a `"No internet service"` level that is 100% redundant** with
-   `InternetService == 'No'` (1,526 rows), and `MultipleLines` does the same with
-   `"No phone service"`. Left alone, one-hot encoding would spend seven dummy columns restating
-   one binary fact, so these levels are collapsed to `"No"`.
-3. **`TotalCharges` is close to `tenure × MonthlyCharges`** (correlation 0.83 with tenure) — a
-   derived column that adds little for a linear model. It was kept, with the redundancy noted.
-4. **`gender` carries no signal** (26.9% vs 26.2% churn). Kept for transparency rather than
-   removed, since removing it would hide the finding.
+1. `TotalCharges` stored as string; 11 blank-string rows, all `tenure==0` brand-new signups -> changed to numeric, imputed as `0.0`.
+2. Six add-on columns' `"No internet service"` category is 100% redundant with `InternetService=='No'` (same for `MultipleLines`/`PhoneService`) -> collapsed to `"No"`.
+3. `TotalCharges ≈ tenure × MonthlyCharges` (corr 0.83), this is a derived column and can be redundant
+4. `gender` carries no real signal (26.9% vs 26.2% churn). So it is kept for transparency, not predictive value.
 
 ### Why PR-AUC over ROC-AUC
 
-ROC-AUC's baseline is always 0.5 regardless of class balance, and with 73% non-churners a model
-can look strong largely by being right about the easy majority. PR-AUC's baseline *is* the churn
-rate (0.265 here), so it only rewards being right about the minority class — which is the entire
-point of the exercise.
+PR-AUC (0.636 score) as the evaluation metric, because of the class imbalance, precision is more important and PR-AUC is more relevant to a problem that's fundamentally about finding a minority class. 
 
 The honest comparison is the multiple over each metric's own floor: the chosen model is about
 **1.7× its ROC-AUC floor** but about **2.5× its PR-AUC floor**. The metric with the smaller
 headline number is the one where the model is doing more real work.
-
-Held-out test set: **ROC-AUC 0.8424, PR-AUC 0.6359, Brier 0.1379**.
 
 ### Why plain LogisticRegression, not `class_weight='balanced'`
 
@@ -85,40 +64,33 @@ Held-out test set: **ROC-AUC 0.8424, PR-AUC 0.6359, Brier 0.1379**.
 | RandomForest | 0.8442 | 0.6528 | 0.1492 |
 | HistGB | 0.8390 | 0.6468 | 0.1382 |
 
-Balancing buys nothing on either ranking metric and costs ~22% on Brier — it makes the predicted
+Balancing buys nothing on either ranking metric. it makes the predicted
 probabilities meaningfully less trustworthy for no ranking benefit. Since every tool in this app
 returns a *continuous* risk score that a human reads as a probability, calibration is the property
-that actually matters here, so the plain model wins. The tree ensembles don't beat the linear
+that actually matters here, so the plain model wins. 
+
+The tree ensembles don't beat the linear
 model on any of the three metrics, and the linear model gives exact per-feature contributions for
 `top_factors` with no extra tooling.
-
-### No decision threshold anywhere in the app
-
-The notebook uses 0.40 once, only to print a concrete confusion matrix. It is not claimed to be
-cost-optimal — the correct threshold depends on retention-offer cost versus customer lifetime
-value, and the dataset contains neither. Every tool returns a continuous `risk_score` and leaves
-the accept/reject decision to the user.
 
 ---
 
 ## Stage 3 — how the agent plans and self-checks
 
-### Tool design: fused and typed, not one tool per question
+### Tool design
 
-The 8 tools are deliberately not one-per-question (which pushes all the planning into the tool
-list) and not a single raw code sandbox (which makes every answer unauditable). Each tool is a
-small typed surface that generalises across many questions:
+I have chosen 8 tools. Each tool is a small typed surface that generalises across many questions:
 
 | tool | what it covers |
 | --- | --- |
 | `predict_churn_risk` | score one existing customer, with explained factors |
 | `predict_hypothetical` | score a partial customer description, reporting defaulted fields |
-| `compare_scenarios` | what-if; the delta is computed in Python, never by the model subtracting |
+| `compare_scenarios` | hypothetical customer or data points modification for existing; the delta is computed in Python, never by the model subtracting |
 | `describe_column` | univariate stats / value counts / IQR outliers |
 | `segment_stats` | filter + group by up to 2 dims + arbitrary aggregations |
 | `rank_customers` | top-N on any column, including `risk_score` |
 | `correlation` | dtype-dispatched association test |
-| `run_pandas` | last-resort escape hatch, AST-whitelisted |
+| `run_pandas` | last-resort to run custom queries, have checks & guardrails |
 
 Two design choices inside these are worth calling out:
 
@@ -137,41 +109,22 @@ distributional context:
              "decile_churn_rate": 0.5835, "baseline_churn_rate": 0.2654}}
 ```
 
-The agent can therefore say "their 2-month tenure puts them in the bottom decile, which churns at
-58% against a 27% baseline" without a second tool round-trip, and without inventing the
-comparison. Mapping the model's transformed feature names (`InternetService_Fiber optic`) back to
-raw column and value is done by walking the fitted `OneHotEncoder`'s own categories, not by
-splitting the name on an underscore — several column values contain spaces and underscores, and
-string-splitting would eventually pick the wrong boundary.
+The agent can therefore say "their 2-month tenure churns at 58% against a 27% baseline" without a second tool round-trip, and without inventing the
+comparison. Mapping the model's transformed feature names (`InternetService_Fiber optic`) back to raw column and value is done by walking the fitted `OneHotEncoder`'s own categories, not by splitting the name on an underscore
 
-### The self-check: how the verification design got here
+### The self-check: 
 
-This went through three iterations, and the discarded ones explain the final shape.
-
-**1. A mechanical numeric ledger.** Collect every number in the tool outputs, then check that
-every number in the draft answer appears in that set. This catches pure fabrication, but it is
-blind to the more likely failure: *mislabeling*. If the agent writes "this customer's risk score
-is 42%" when 42% was actually the DSL segment's churn rate, the number is genuinely present in
-the tool outputs. Value-matching cannot see that the label attached to it is wrong, no matter how
-the check is scoped.
-
-**2. A single-call LLM faithfulness judge**, modelled on RAGAS's faithfulness metric. Instead of
+**1. A single-call LLM faithfulness judge**, modelled on RAGAS's faithfulness metric. Instead of
 asking "does this number exist", the judge is given the draft answer plus the structured tool
 outputs and asked, per claim, whether the claim *including what it says it measures* is entailed
 by a specific tool result. That is a semantic check, so mislabeling is exactly what it catches.
-Claims come back classified `grounded` / `mislabeled` / `fabricated`. Real RAGAS decomposes an
-answer into atomic claims across two or more LLM calls; this uses one combined call to stay inside
-a sane latency and rate-limit budget. That is a stated simplification, not an oversight.
+Claims come back classified `grounded` / `mislabeled` / `fabricated`. 
 
-**3. Scoping the check to a turns window.** The judge checks the draft against the tool calls
+**2. Scoping the check to a turns window.** The judge checks the draft against the tool calls
 inside a sliding window of the last `RECENT_TURNS_WINDOW` turns (default 3), not the whole thread
 and not the current turn alone. Whole-thread grows context without bound. Current-turn-only is too
 strict — a natural follow-up one turn later ("what about DSL instead?") would force a wasteful
-recompute of something still sitting in context. **This is the same window used for message
-history summarization**, on purpose: one hyperparameter drives both, so the boundary the agent can
-see and the boundary the judge checks against can never disagree. Anything older is compressed to
-prose, its figures are treated as unverifiable, and the system prompt tells the agent to recompute
-rather than recall.
+recompute of something still sitting in context. 
 
 **What happens on a failure.** `run_verified_turn` re-invokes the agent once with a corrective
 message naming the specific flagged claims and the judge's reasons. If the rewrite still fails,
