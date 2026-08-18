@@ -10,10 +10,11 @@ scikit-learn==1.8.0
 scipy==1.16.3
 joblib==1.4.2
 
-langchain-core==0.3.29
-langchain-openai==0.2.14
-langgraph==0.2.61
-langgraph-checkpoint-sqlite==2.0.1
+langchain-core==1.5.6
+langchain-openai==1.5.1
+langgraph==1.2.11
+langgraph-prebuilt==1.1.0
+langgraph-checkpoint-sqlite==3.1.1
 aiosqlite==0.20.0
 
 pytest==8.3.4
