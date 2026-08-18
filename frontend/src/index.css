@@ -18,3 +18,127 @@ body {
   color: #e6e9ef;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
+
+.markdown {
+  line-height: 1.6;
+}
+
+.markdown > *:first-child {
+  margin-top: 0;
+}
+
+.markdown > *:last-child {
+  margin-bottom: 0;
+}
+
+.markdown p {
+  margin: 0 0 0.75em;
+}
+
+.markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown strong {
+  font-weight: 600;
+  color: #fff;
+}
+
+.markdown em {
+  font-style: italic;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  font-weight: 600;
+  color: #fff;
+  margin: 1em 0 0.5em;
+}
+
+.markdown h1 { font-size: 1.25rem; }
+.markdown h2 { font-size: 1.125rem; }
+.markdown h3 { font-size: 1rem; }
+
+.markdown ul,
+.markdown ol {
+  margin: 0 0 0.75em;
+  padding-left: 1.5em;
+}
+
+.markdown li {
+  margin: 0.25em 0;
+}
+
+.markdown li > p {
+  margin: 0;
+}
+
+.markdown code {
+  font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", monospace;
+  font-size: 0.875em;
+  background: var(--color-panel);
+  border: 1px solid var(--color-edge);
+  border-radius: 0.25rem;
+  padding: 0.125em 0.375em;
+}
+
+.markdown pre {
+  margin: 0.75em 0;
+  padding: 0.75em 1em;
+  background: var(--color-panel);
+  border: 1px solid var(--color-edge);
+  border-radius: 0.5rem;
+  overflow-x: auto;
+}
+
+.markdown pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.8125rem;
+}
+
+.markdown table {
+  width: 100%;
+  margin: 0.75em 0;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.markdown th,
+.markdown td {
+  border: 1px solid var(--color-edge);
+  padding: 0.5em 0.75em;
+  text-align: left;
+}
+
+.markdown th {
+  background: var(--color-panel);
+  font-weight: 600;
+  color: #fff;
+}
+
+.markdown tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--color-panel) 50%, transparent);
+}
+
+.markdown blockquote {
+  margin: 0.75em 0;
+  padding-left: 1em;
+  border-left: 3px solid var(--color-edge);
+  color: var(--color-muted);
+}
+
+.markdown a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown hr {
+  margin: 1em 0;
+  border: none;
+  border-top: 1px solid var(--color-edge);
+}

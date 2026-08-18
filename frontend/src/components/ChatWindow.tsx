@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { Message } from '../api/chatClient'
 import type { PendingAnswer } from '../hooks/useChatStream'
+import MarkdownContent from './MarkdownContent'
 import MessageBubble from './MessageBubble'
 import { ToolCallCard, VerificationBadge } from './ToolCallCard'
 
@@ -63,8 +64,8 @@ export default function ChatWindow({
               verification={pending.verification}
               rewritten={pending.rewritten}
             />
-            <div className="whitespace-pre-wrap">
-              {pending.content}
+            <div>
+              {pending.content && <MarkdownContent content={pending.content} />}
               {isStreaming && <span className="animate-pulse text-muted">▍</span>}
             </div>
           </div>

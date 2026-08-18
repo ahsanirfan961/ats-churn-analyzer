@@ -1,4 +1,5 @@
 import type { Message } from '../api/chatClient'
+import MarkdownContent from './MarkdownContent'
 import { ToolCallCard, VerificationBadge } from './ToolCallCard'
 
 export default function MessageBubble({ message }: { message: Message }) {
@@ -29,7 +30,7 @@ export default function MessageBubble({ message }: { message: Message }) {
         <ToolCallCard key={index} call={call} />
       ))}
       <VerificationBadge verification={message.verification ?? null} />
-      {message.content && <div className="whitespace-pre-wrap">{message.content}</div>}
+      {message.content && <MarkdownContent content={message.content} />}
     </div>
   )
 }
