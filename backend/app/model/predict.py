@@ -1,9 +1,11 @@
 import pandas as pd
 
+from app.data.enrich import enrich_factor
 from app.data.store import df
 from app.model.loader import (
     all_feature_names,
     feature_cols,
+    feature_map,
     numeric_cols,
     pipeline,
 )
@@ -18,14 +20,19 @@ def _score_row(x: pd.DataFrame, top_k: int) -> tuple[float, list[dict]]:
     contributions = transformed[0] * pipeline.named_steps["clf"].coef_[0]
 
     ranked = sorted(range(len(contributions)), key=lambda i: abs(contributions[i]), reverse=True)
-    top_factors = [
-        {
-            "feature": all_feature_names[i],
+    top_factors = []
+    for i in ranked[:top_k]:
+        raw_column, _ = feature_map[all_feature_names[i]]
+        customer_value = x.iloc[0][raw_column]
+        if hasattr(customer_value, "item"):
+            customer_value = customer_value.item()
+        top_factors.append({
+            "feature": raw_column,
             "direction": "increases_risk" if contributions[i] > 0 else "decreases_risk",
             "contribution": round(float(contributions[i]), 4),
-        }
-        for i in ranked[:top_k]
-    ]
+            "customer_value": customer_value,
+            "context": enrich_factor(raw_column, customer_value),
+        })
     return round(risk_score, 4), top_factors
 
 

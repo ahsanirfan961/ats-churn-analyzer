@@ -14,15 +14,21 @@ baseline_churn_rate = round(float(churned.mean()), 4)
 
 NUMERIC_COLUMNS = set(numeric_cols) | {"risk_score"}
 CATEGORICAL_COLUMNS = [c for c in df.columns if c not in NUMERIC_COLUMNS and c != "customerID"]
-COLUMN_UNITS = {"tenure": "months", "MonthlyCharges": "$", "TotalCharges": "$"}
+COLUMN_UNITS = {"tenure": "months"}
 
 categorical_levels = {c: sorted(str(v) for v in df[c].unique()) for c in CATEGORICAL_COLUMNS}
 
 
 def _decile_table(column: str) -> pd.DataFrame:
-    deciles = pd.qcut(scored_df[column], 10, duplicates="drop")
-    grouped = churned.groupby(deciles, observed=True)
-    return pd.DataFrame({"n": grouped.size(), "churn_rate": grouped.mean().round(4)})
+    values = scored_df[column]
+    deciles = pd.qcut(values, 10, duplicates="drop")
+    by_value = values.groupby(deciles, observed=True)
+    return pd.DataFrame({
+        "n": by_value.size(),
+        "low": by_value.min(),
+        "high": by_value.max(),
+        "churn_rate": churned.groupby(deciles, observed=True).mean().round(4),
+    })
 
 
 def _segment_table(column: str) -> pd.DataFrame:
