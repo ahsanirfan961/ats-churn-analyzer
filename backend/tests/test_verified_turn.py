@@ -17,7 +17,14 @@ def turn_messages(question: str, answer: str):
     ]
 
 
+class ClosableConnection:
+    async def close(self):
+        pass
+
+
 class FakeGraph:
+    checkpointer = type("Saver", (), {"conn": ClosableConnection()})()
+
     def __init__(self, answers):
         self.answers = list(answers)
         self.messages = []
