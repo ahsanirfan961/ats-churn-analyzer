@@ -3,14 +3,24 @@ from app.data.store import NUMERIC_COLUMNS, scored_df, unknown_column_error
 AGGFUNCS = {"mean", "sum", "count", "median"}
 
 
-def validate_filters(filters: dict) -> dict | None:
+def normalize_filters(filters: dict) -> tuple[dict, dict | None]:
+    normalized = {}
     for column, value in filters.items():
         if column not in scored_df.columns:
-            return unknown_column_error(column)
-        if column not in NUMERIC_COLUMNS and value not in set(scored_df[column]):
-            valid = sorted(str(v) for v in scored_df[column].unique())
-            return {"error": f"{value!r} is not a value of {column!r}; valid values are {valid}"}
-    return None
+            return {}, unknown_column_error(column)
+        series = scored_df[column]
+        if column in NUMERIC_COLUMNS:
+            try:
+                normalized[column] = series.dtype.type(value)
+            except (TypeError, ValueError):
+                return {}, {"error": f"{value!r} is not a valid numeric value for {column!r}"}
+            continue
+        match = next((level for level in series.unique() if str(level) == str(value)), None)
+        if match is None:
+            valid = sorted(str(v) for v in series.unique())
+            return {}, {"error": f"{value!r} is not a value of {column!r}; valid values are {valid}"}
+        normalized[column] = match
+    return normalized, None
 
 
 def _summarize(frame, metrics: list[tuple[str, str]]) -> dict:
@@ -29,7 +39,7 @@ def segment_stats(filters: dict, group_by: list[str] | None = None,
     group_by = group_by or []
     metrics = [tuple(m) for m in (metrics or [])]
 
-    invalid = validate_filters(filters)
+    filters, invalid = normalize_filters(filters)
     if invalid:
         return invalid
     for column in group_by:

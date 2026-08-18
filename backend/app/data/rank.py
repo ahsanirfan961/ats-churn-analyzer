@@ -1,6 +1,6 @@
 import json
 
-from app.data.segment import validate_filters
+from app.data.segment import normalize_filters
 from app.data.store import scored_df, unknown_column_error
 
 
@@ -10,7 +10,7 @@ def rank_customers(sort_by: str, filters: dict | None = None, ascending: bool = 
     if sort_by not in scored_df.columns:
         return unknown_column_error(sort_by)
 
-    invalid = validate_filters(filters)
+    filters, invalid = normalize_filters(filters)
     if invalid:
         return invalid
 
